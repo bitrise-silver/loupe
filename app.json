@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Loupe",
+    "slug": "loupe",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "platforms": ["ios", "android"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.loupe.example"
+    },
+    "android": {
+      "package": "dev.loupe.example"
+    },
+    "plugins": []
+  }
+}

@@ -1,0 +1,232 @@
+---
+# Loupe delivery pipeline — the fingerprint gate.
+#
+# Each PR is routed by @expo/fingerprint: if the native layer is unchanged, ship the JS
+# over-the-air via Bitrise CodePush; if it changed, do a full CI build + distribute a new binary.
+# This is the concrete implementation of docs/design/bitrise-ci-pipeline.md — read that for the
+# full annotated rationale, the iOS code-signing notes, and the "install any iteration" registry.
+#
+# Secrets (set in Bitrise Secrets, NOT here): CODEPUSH_API_TOKEN, NOTIFY_FCM_SA_JSON, FCM_PROJECT_ID,
+# plus the Apple service connection + signing files for the iOS native route.
+# ⚠️ Confirm the CodePush CLI flags/package against current Bitrise docs before first run.
+
+format_version: "23"
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+project_type: react-native
+
+tools:
+  nodejs: 22.23.1
+
+app:
+  envs:
+    - CODEPUSH_DEPLOYMENT: Staging
+
+# Android-first: the default triggers run ONLY the Android delivery (no code signing needed).
+# Once iOS code signing is set up (see .claude/skills/bitrise-setup-loupe, step 4b), switch these to
+# `pipeline: deliver` to run both platforms.
+trigger_map:
+  - pull_request_target_branch: "*"
+    workflow: deliver_android
+  - push_branch: main
+    workflow: deliver_android
+
+pipelines:
+  deliver:
+    stages:
+      - both: {}
+
+stages:
+  both:
+    workflows:
+      - deliver_android: {}
+      - deliver_ios: {}
+
+workflows:
+  # ==========================================================================================
+  # Android — fingerprint gate: JS-only → CodePush OTA; native change → build + distribute.
+  # ==========================================================================================
+  deliver_android:
+    steps:
+      - git-clone@8: {}
+      - restore-npm-cache@3: {}
+      - npm@3:
+          title: npm ci
+          inputs:
+            - command: ci
+      - save-npm-cache@1: {}
+      - script@1:
+          title: Fingerprint native layer → routing key (@expo/fingerprint)
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                HASH="$(npx @expo/fingerprint fingerprint:generate | jq -r '.hash')"
+                envman add --key BUNDLE_HASH_STRING --value "loupe-fingerprint-android-${HASH}"
+                envman add --key APP_VERSION --value "$(node -p "require('./app.json').expo.version")"
+                echo "Native fingerprint: ${HASH}"
+      - restore-cache@3:
+          title: Has a binary already shipped for this native fingerprint?
+          inputs:
+            - key: $BUNDLE_HASH_STRING
+
+      # ---- ROUTE A · fingerprint HIT = JS-only = ship OTA (no rebuild) ----
+      - script@1:
+          title: "[ota] Build JS bundle + release to Bitrise CodePush"
+          run_if: '{{ not (enveq "BITRISE_CACHE_HIT" "false") }}'
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "Fingerprint HIT → native unchanged → shipping JS over-the-air."
+                mkdir -p _codepush/android
+                npx expo export:embed \
+                  --platform android --dev false --bytecode \
+                  --entry-file index.ts \
+                  --bundle-output _codepush/android/index.android.bundle \
+                  --assets-dest _codepush/android
+                # ⚠️ Confirm exact CLI/flags against Bitrise CodePush docs.
+                bitrise :codepush push \
+                  --platform android \
+                  --deployment "$CODEPUSH_DEPLOYMENT" \
+                  --app-version "$APP_VERSION" \
+                  --bundle _codepush/android
+      - script@1:
+          title: "[ota] Notify testers via FCM topic"
+          run_if: '{{ not (enveq "BITRISE_CACHE_HIT" "false") }}'
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                # No CodePush webhook exists, so the workflow sends the push itself (FCM HTTP v1).
+                printf '%s' "$NOTIFY_FCM_SA_JSON" > /tmp/sa.json
+                export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json
+                TOKEN="$(gcloud auth application-default print-access-token \
+                          --scopes=https://www.googleapis.com/auth/firebase.messaging)"
+                curl -fsS -X POST "https://fcm.googleapis.com/v1/projects/${FCM_PROJECT_ID}/messages:send" \
+                  -H "Authorization: Bearer ${TOKEN}" -H 'content-type: application/json' -d "{
+                    \"message\": { \"topic\": \"iterations-${CODEPUSH_DEPLOYMENT}\",
+                      \"notification\": { \"title\": \"New iteration ready\",
+                                          \"body\": \"Tap to install ${APP_VERSION}\" } } }"
+
+      # ---- ROUTE B · fingerprint MISS = native change = build + distribute ----
+      - script@1:
+          title: "[native] Expo prebuild (Android)"
+          run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "Fingerprint MISS → native/deps changed → full build + redistribute."
+                npx expo prebuild --platform android --no-install
+      - gradle-runner@5:
+          title: "[native] Build Android APK (assembleRelease)"
+          run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
+          inputs:
+            - build_root_directory: android
+            - gradle_task: assembleRelease
+            - gradlew_path: gradlew
+      - script@1:
+          title: "[native] Stage APK + register fingerprint→binary"
+          run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                mkdir -p _nativecache
+                APK="$(ls android/app/build/outputs/apk/release/*.apk | head -1)"
+                cp "$APK" _nativecache/app-release.apk
+                echo "$APP_VERSION" > _nativecache/appversion.txt
+                cp "$APK" "$BITRISE_DEPLOY_DIR/app-release.apk"
+      - save-cache@1:
+          title: "[native] Register this fingerprint as shipped"
+          run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
+          inputs:
+            - key: $BUNDLE_HASH_STRING
+            - paths: _nativecache
+      - deploy-to-bitrise-io@2:
+          title: "[native] Distribute APK to testers (public install page)"
+          run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
+          inputs:
+            - is_enable_public_page: "true"
+    meta:
+      bitrise.io:
+        stack: ubuntu-noble-24.04-bitrise-2025-android
+        machine_type_id: g2.linux.large
+
+  # ==========================================================================================
+  # iOS — same gate. OTA route is identical; native route needs a SIGNED DEVICE archive
+  # (not a simulator build) so testers can install. See docs/design/bitrise-ci-pipeline.md §3.3.
+  # NOT in the default trigger_map — set up iOS code signing first (Apple connection + cert +
+  # ad-hoc profile + device UDIDs), then switch the trigger_map above to `pipeline: deliver`.
+  # ==========================================================================================
+  deliver_ios:
+    steps:
+      - git-clone@8: {}
+      - restore-npm-cache@3: {}
+      - npm@3:
+          title: npm ci
+          inputs:
+            - command: ci
+      - save-npm-cache@1: {}
+      - script@1:
+          title: Fingerprint native layer → routing key (@expo/fingerprint)
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                HASH="$(npx @expo/fingerprint fingerprint:generate | jq -r '.hash')"
+                envman add --key BUNDLE_HASH_STRING --value "loupe-fingerprint-ios-${HASH}"
+                envman add --key APP_VERSION --value "$(node -p "require('./app.json').expo.version")"
+                echo "Native fingerprint: ${HASH}"
+      - restore-cache@3:
+          inputs:
+            - key: $BUNDLE_HASH_STRING
+
+      # ---- ROUTE A · OTA (JS-only) ----
+      - script@1:
+          title: "[ota] Build JS bundle + release to Bitrise CodePush"
+          run_if: '{{ not (enveq "BITRISE_CACHE_HIT" "false") }}'
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                mkdir -p _codepush/ios
+                npx expo export:embed \
+                  --platform ios --dev false --bytecode \
+                  --entry-file index.ts \
+                  --bundle-output _codepush/ios/main.jsbundle --assets-dest _codepush/ios
+                bitrise :codepush push \
+                  --platform ios --deployment "$CODEPUSH_DEPLOYMENT" \
+                  --app-version "$APP_VERSION" --bundle _codepush/ios
+      # (+ the same [ota] FCM notify step as Android)
+
+      # ---- ROUTE B · native = signed device archive + distribute ----
+      - script@1:
+          title: "[native] Expo prebuild (iOS)"
+          run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                npx expo prebuild --platform ios --no-install
+      - cocoapods-install@3:
+          run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
+          inputs:
+            - source_root_path: $BITRISE_SOURCE_DIR/ios
+      - manage-ios-code-signing@3:
+          run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
+          inputs:
+            - distribution_method: ad-hoc
+      - xcode-archive@5:
+          title: "[native] Archive signed .ipa"
+          run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
+          inputs:
+            - distribution_method: ad-hoc
+      - deploy-to-bitrise-io@2:
+          run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
+          inputs:
+            - is_enable_public_page: "true"
+    meta:
+      bitrise.io:
+        stack: osx-xcode-16.4.x
+        machine_type_id: g2.mac.large

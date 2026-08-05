@@ -1,0 +1,8 @@
+{
+  "name": "babel-plugin-loupe-source",
+  "version": "0.1.0",
+  "description": "Injects data-loupe-source=\"file:line\" onto JSX elements so a tapped element maps back to source (release-safe).",
+  "main": "index.js",
+  "license": "MIT",
+  "keywords": ["babel-plugin", "loupe", "react-native", "expo"]
+}
