@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import type { ComposerResult } from './annotate/Composer';
 import { captureContextBundle } from './capture/context';
@@ -105,7 +105,11 @@ export function LoupeProvider({ config = {}, children }: Props) {
         setMode('sent'); // visible "done" clue
         await new Promise((resolve) => setTimeout(resolve, 900));
       } catch (err) {
+        // Surface the failure on-device — reviewers test the installed app with no Metro attached,
+        // so a swallowed error looks like "nothing happened". Show the real reason.
+        const message = err instanceof Error ? err.message : String(err);
         console.warn('[loupe] sink failed', err);
+        Alert.alert("Loupe — couldn't send feedback", message);
       }
       reset();
     },
