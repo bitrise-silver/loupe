@@ -79,9 +79,19 @@ export function createBitriseTriggerSink(opts: {
           },
         }),
       });
-      if (!res.ok) {
-        const detail = await res.text().catch(() => '');
-        throw new Error(`[loupe] bitrise trigger returned ${res.status} ${detail}`.trim());
+      // /build/start.json can return a 2xx with {"status":"error"} (a rejected token/params), so
+      // verify the BODY, not just the HTTP status — otherwise we'd report a false "Sent" for a
+      // build that never started, and hide the reason.
+      const body = await res.text().catch(() => '');
+      let started = res.ok;
+      try {
+        const json = JSON.parse(body) as { status?: string; build_slug?: string; build_url?: string };
+        started = json.status === 'ok' || Boolean(json.build_slug) || Boolean(json.build_url);
+      } catch {
+        // non-JSON body (e.g. a proxy/captive-portal page) — fall back to the HTTP status
+      }
+      if (!started) {
+        throw new Error(`Bitrise didn't start a build (HTTP ${res.status}):\n${body.slice(0, 400)}`);
       }
     },
   };
