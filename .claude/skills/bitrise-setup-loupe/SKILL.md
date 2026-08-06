@@ -51,10 +51,12 @@ Design references (read if a step is unclear): [`docs/design/bitrise-codepush-rd
 - `mcp__bitrise__me`, `mcp__bitrise__list_apps` → find the app + workspace slug. If missing, offer `register_app` / `create_connected_app` (confirm first).
 - Record the CodePush server URL: `https://<workspace-slug>.codepush.bitrise.io`.
 
-### 2 — CodePush deployments
-- `mcp__bitrise__codepush_list_deployments(app_id)` to see what exists.
-- Create the ones needed with `codepush_create_deployment` (e.g. `Staging`, `Production`) → capture the **deployment keys**.
-- (Optional) one lightweight **preview deployment per shareable iteration / branch** — this is how "install any iteration" works (see iterations doc). Keys are not secrets.
+### 2 — Release Management connected app + CodePush deployments
+- **Connect the app to Release Management first** — this *is* the CodePush "app". Bitrise → **Release Management → Connect app** (or `create_connected_app` with `platform`, `store_app_id` = the package name/bundle id, `workspace_slug`).
+  - ⚠️ **Set "Development framework" to `React Native`.** The UI **defaults it to "Others"**, which is wrong for an Expo/RN app. `create_connected_app` does **not** accept a framework field, so if you create via API you must set/fix it in the UI (or `update_connected_app`) afterward. **Verify with `get_connected_app` → `"framework":"react_native"`.**
+- **`CODEPUSH_APP_ID` is this connected app's UUID** — the `connected-apps/<uuid>` segment of the Release Management URL (e.g. `.../connected-apps/62a5…/code-push`). It is **not** the Bitrise app slug, and the UI doesn't label it "App ID". This UUID is the `app_id` for every `codepush_*` call.
+- `codepush_list_deployments(app_id)` to see what exists; create the ones needed with `codepush_create_deployment` (e.g. `Staging`, `Production`) → capture the **deployment keys** (these go in `app.json`; not secrets).
+- (Optional) one lightweight **preview deployment per shareable iteration / branch** — this is how "install any iteration" works (see iterations doc).
 
 ### 3 — Configure the mobile app
 Edit `app.json` to add the CodePush config plugin, then prebuild (run inside an RDE or locally):
