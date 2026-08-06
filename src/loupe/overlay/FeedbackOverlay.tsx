@@ -4,6 +4,7 @@ import type { LoupeMode } from '../context';
 import type { HitResult } from '../registry/registry';
 import type { Screenshot } from '../types';
 import { InspectLayer } from './InspectLayer';
+import { StatusOverlay } from './StatusOverlay';
 
 interface Props {
   mode: LoupeMode;
@@ -23,6 +24,9 @@ export function FeedbackOverlay({ mode, screenshot, pick, onPick, onSubmit, onCa
     return (
       <AnnotateSheet screenshot={screenshot} pick={pick} onSubmit={onSubmit} onCancel={onCancel} />
     );
+  }
+  if (mode === 'sending' || mode === 'sent') {
+    return <StatusOverlay state={mode} />;
   }
   return null;
 }

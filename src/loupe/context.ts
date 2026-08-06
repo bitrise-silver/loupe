@@ -3,7 +3,7 @@ import { createContext } from 'react';
 import type { Registry } from './registry/registry';
 import type { LoupeConfig } from './types';
 
-export type LoupeMode = 'idle' | 'inspecting' | 'capturing' | 'annotating';
+export type LoupeMode = 'idle' | 'inspecting' | 'capturing' | 'annotating' | 'sending' | 'sent';
 
 export interface LoupeContextValue {
   config: LoupeConfig & { enabled: boolean };

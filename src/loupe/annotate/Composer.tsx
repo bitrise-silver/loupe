@@ -103,7 +103,10 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     padding: 16,
-    paddingBottom: 32,
+    // Android is edge-to-edge on Expo SDK 54, so this sheet draws BEHIND the system nav bar.
+    // Clear it, or the Cancel/Send row is untappable (taps hit the nav bar). The robust fix is
+    // react-native-safe-area-context's useSafeAreaInsets().bottom — added on the next rebuild.
+    paddingBottom: 56,
     gap: 12,
     backgroundColor: '#16161d',
     borderTopLeftRadius: 20,

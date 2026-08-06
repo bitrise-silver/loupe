@@ -1,0 +1,56 @@
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+
+interface Props {
+  state: 'sending' | 'sent';
+}
+
+/** The visible "your feedback is being processed / was sent" clue shown over the app after Send. */
+export function StatusOverlay({ state }: Props) {
+  return (
+    <View style={styles.scrim} pointerEvents="auto">
+      <View style={styles.card}>
+        {state === 'sending' ? (
+          <>
+            <ActivityIndicator size="large" color="#6d5efc" />
+            <Text style={styles.text}>Sending your feedback…</Text>
+          </>
+        ) : (
+          <>
+            <View style={styles.check}>
+              <Text style={styles.checkMark}>✓</Text>
+            </View>
+            <Text style={styles.text}>Sent to Loupe</Text>
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  scrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  card: {
+    minWidth: 200,
+    paddingVertical: 28,
+    paddingHorizontal: 32,
+    borderRadius: 20,
+    backgroundColor: '#16161d',
+    alignItems: 'center',
+    gap: 16,
+  },
+  text: { color: '#f5f5f7', fontSize: 16, fontWeight: '600' },
+  check: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#22c55e',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkMark: { color: 'white', fontSize: 26, fontWeight: '800' },
+});

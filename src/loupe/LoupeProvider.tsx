@@ -94,12 +94,20 @@ export function LoupeProvider({ config = {}, children }: Props) {
 
       const context = contextRef.current ?? (await captureContextBundle(config));
       const payload = buildPayload({ screenshot, annotations: [annotation], context });
-      reset();
+
+      setMode('sending'); // visible "processing" clue
       try {
-        await sink.send(payload);
+        await Promise.all([
+          sink.send(payload).then(() => config.onSent?.(payload)),
+          // keep the spinner on screen long enough to notice, even for an instant sink
+          new Promise((resolve) => setTimeout(resolve, 500)),
+        ]);
+        setMode('sent'); // visible "done" clue
+        await new Promise((resolve) => setTimeout(resolve, 900));
       } catch (err) {
         console.warn('[loupe] sink failed', err);
       }
+      reset();
     },
     [pick, screenshot, sink, config, reset],
   );

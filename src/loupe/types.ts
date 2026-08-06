@@ -77,4 +77,6 @@ export interface LoupeConfig {
   endpoint?: string;
   /** Optionally provide the current route (e.g. from React Navigation) for the context bundle. */
   getCurrentRoute?: () => { name?: string; params?: unknown } | null;
+  /** Called after a payload is sent — hook your own confirmation UI / "My feedback" list. */
+  onSent?: (payload: FeedbackPayload) => void;
 }
