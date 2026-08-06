@@ -72,8 +72,11 @@ workflows:
                 # The build-trigger token is a Bitrise Secret (LOUPE_TRIGGER_TOKEN). Expo inlines
                 # EXPO_PUBLIC_* into the bundle at build time; without it the app uses the console sink.
                 if [ -n "${LOUPE_TRIGGER_TOKEN:-}" ]; then
-                  envman add --key EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN --value "$LOUPE_TRIGGER_TOKEN"
-                  echo "Loupe agent sink ENABLED — in-app feedback will trigger process_feedback."
+                  # Strip stray whitespace/newline — a trailing newline in the secret gets baked into
+                  # the bundle and makes Bitrise reject the token (works in curl, fails in-app).
+                  CLEAN_TOKEN="$(printf '%s' "$LOUPE_TRIGGER_TOKEN" | tr -d '[:space:]')"
+                  envman add --key EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN --value "$CLEAN_TOKEN"
+                  echo "Loupe agent sink ENABLED — trigger token length: ${#CLEAN_TOKEN}."
                 else
                   echo "LOUPE_TRIGGER_TOKEN not set — APK falls back to console sink (feedback won't trigger CI)."
                 fi
@@ -123,8 +126,11 @@ workflows:
                 # The build-trigger token is a Bitrise Secret (LOUPE_TRIGGER_TOKEN). Expo inlines
                 # EXPO_PUBLIC_* into the bundle at build time; without it the app uses the console sink.
                 if [ -n "${LOUPE_TRIGGER_TOKEN:-}" ]; then
-                  envman add --key EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN --value "$LOUPE_TRIGGER_TOKEN"
-                  echo "Loupe agent sink ENABLED — in-app feedback will trigger process_feedback."
+                  # Strip stray whitespace/newline — a trailing newline in the secret gets baked into
+                  # the bundle and makes Bitrise reject the token (works in curl, fails in-app).
+                  CLEAN_TOKEN="$(printf '%s' "$LOUPE_TRIGGER_TOKEN" | tr -d '[:space:]')"
+                  envman add --key EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN --value "$CLEAN_TOKEN"
+                  echo "Loupe agent sink ENABLED — trigger token length: ${#CLEAN_TOKEN}."
                 else
                   echo "LOUPE_TRIGGER_TOKEN not set — APK falls back to console sink (feedback won't trigger CI)."
                 fi
@@ -279,8 +285,11 @@ workflows:
                 # The build-trigger token is a Bitrise Secret (LOUPE_TRIGGER_TOKEN). Expo inlines
                 # EXPO_PUBLIC_* into the bundle at build time; without it the app uses the console sink.
                 if [ -n "${LOUPE_TRIGGER_TOKEN:-}" ]; then
-                  envman add --key EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN --value "$LOUPE_TRIGGER_TOKEN"
-                  echo "Loupe agent sink ENABLED — in-app feedback will trigger process_feedback."
+                  # Strip stray whitespace/newline — a trailing newline in the secret gets baked into
+                  # the bundle and makes Bitrise reject the token (works in curl, fails in-app).
+                  CLEAN_TOKEN="$(printf '%s' "$LOUPE_TRIGGER_TOKEN" | tr -d '[:space:]')"
+                  envman add --key EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN --value "$CLEAN_TOKEN"
+                  echo "Loupe agent sink ENABLED — trigger token length: ${#CLEAN_TOKEN}."
                 else
                   echo "LOUPE_TRIGGER_TOKEN not set — APK falls back to console sink (feedback won't trigger CI)."
                 fi
