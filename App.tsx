@@ -49,7 +49,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  screen: { flex: 1, padding: 24, gap: 20, backgroundColor: '#0b0b0f' },
+  screen: { flex: 1, padding: 24, gap: 20, backgroundColor: '#2a2a30' },
   h1: { fontSize: 28, fontWeight: '700', color: '#f5f5f7', marginTop: 12 },
   card: { backgroundColor: '#16161d', borderRadius: 16, padding: 18, gap: 8 },
   cardTitle: { fontSize: 17, fontWeight: '600', color: '#f5f5f7' },
