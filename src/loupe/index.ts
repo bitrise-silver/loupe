@@ -4,7 +4,14 @@ export { LoupeProvider } from './LoupeProvider';
 export { LoupeTarget } from './registry/LoupeTarget';
 export { useLoupe } from './hooks/useLoupe';
 
-export { consoleSink, createHttpSink, createAgentSink, resolveSink } from './sinks';
+export {
+  consoleSink,
+  createHttpSink,
+  createAgentSink,
+  createBitriseTriggerSink,
+  sinkFromEnv,
+  resolveSink,
+} from './sinks';
 
 export type {
   LoupeConfig,

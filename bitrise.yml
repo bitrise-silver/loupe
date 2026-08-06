@@ -62,6 +62,22 @@ workflows:
             - command: ci
       - save-npm-cache@1: {}
       - script@1:
+          title: Inject Loupe agent-sink config (EXPO_PUBLIC_*) into the JS bundle
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                # App slug is public (it appears in build URLs). Override with LOUPE_APP_SLUG if needed.
+                envman add --key EXPO_PUBLIC_LOUPE_APP_SLUG --value "${LOUPE_APP_SLUG:-172f1253-832b-4abf-b338-77a7fa5d7a23}"
+                # The build-trigger token is a Bitrise Secret (LOUPE_TRIGGER_TOKEN). Expo inlines
+                # EXPO_PUBLIC_* into the bundle at build time; without it the app uses the console sink.
+                if [ -n "${LOUPE_TRIGGER_TOKEN:-}" ]; then
+                  envman add --key EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN --value "$LOUPE_TRIGGER_TOKEN"
+                  echo "Loupe agent sink ENABLED — in-app feedback will trigger process_feedback."
+                else
+                  echo "LOUPE_TRIGGER_TOKEN not set — APK falls back to console sink (feedback won't trigger CI)."
+                fi
+      - script@1:
           title: Expo prebuild (Android)
           inputs:
             - content: |-
@@ -96,6 +112,22 @@ workflows:
           inputs:
             - command: ci
       - save-npm-cache@1: {}
+      - script@1:
+          title: Inject Loupe agent-sink config (EXPO_PUBLIC_*) into the JS bundle
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                # App slug is public (it appears in build URLs). Override with LOUPE_APP_SLUG if needed.
+                envman add --key EXPO_PUBLIC_LOUPE_APP_SLUG --value "${LOUPE_APP_SLUG:-172f1253-832b-4abf-b338-77a7fa5d7a23}"
+                # The build-trigger token is a Bitrise Secret (LOUPE_TRIGGER_TOKEN). Expo inlines
+                # EXPO_PUBLIC_* into the bundle at build time; without it the app uses the console sink.
+                if [ -n "${LOUPE_TRIGGER_TOKEN:-}" ]; then
+                  envman add --key EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN --value "$LOUPE_TRIGGER_TOKEN"
+                  echo "Loupe agent sink ENABLED — in-app feedback will trigger process_feedback."
+                else
+                  echo "LOUPE_TRIGGER_TOKEN not set — APK falls back to console sink (feedback won't trigger CI)."
+                fi
       - script@1:
           title: Fingerprint native layer → routing key (@expo/fingerprint)
           inputs:
@@ -236,6 +268,22 @@ workflows:
           inputs:
             - command: ci
       - save-npm-cache@1: {}
+      - script@1:
+          title: Inject Loupe agent-sink config (EXPO_PUBLIC_*) into the JS bundle
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                # App slug is public (it appears in build URLs). Override with LOUPE_APP_SLUG if needed.
+                envman add --key EXPO_PUBLIC_LOUPE_APP_SLUG --value "${LOUPE_APP_SLUG:-172f1253-832b-4abf-b338-77a7fa5d7a23}"
+                # The build-trigger token is a Bitrise Secret (LOUPE_TRIGGER_TOKEN). Expo inlines
+                # EXPO_PUBLIC_* into the bundle at build time; without it the app uses the console sink.
+                if [ -n "${LOUPE_TRIGGER_TOKEN:-}" ]; then
+                  envman add --key EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN --value "$LOUPE_TRIGGER_TOKEN"
+                  echo "Loupe agent sink ENABLED — in-app feedback will trigger process_feedback."
+                else
+                  echo "LOUPE_TRIGGER_TOKEN not set — APK falls back to console sink (feedback won't trigger CI)."
+                fi
       - script@1:
           title: Fingerprint native layer → routing key (@expo/fingerprint)
           inputs:

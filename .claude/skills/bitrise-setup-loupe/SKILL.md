@@ -43,6 +43,7 @@ Design references (read if a step is unclear): [`docs/design/bitrise-codepush-rd
 | Notification target | **Slack incoming webhook** (optional) | one channel for both OTA + build alerts |
 | Fix route policy | e.g. Change/Idea → agent, Broken → human | maps category → sink |
 | Agent credentials | `ANTHROPIC_API_KEY`, `GITHUB_API_TOKEN` | user generates; you tell them where to set them (step 5b) |
+| App→CI trigger token | `LOUPE_TRIGGER_TOKEN` | Bitrise build-trigger token, injected into the app at build so in-app feedback starts `process_feedback` (step 3b) |
 
 ## Steps
 
@@ -67,6 +68,15 @@ Edit `app.json` to add the CodePush config plugin, then prebuild (run inside an 
 ```
 Then: `npm install @bitrise/code-push-sdk` → `npx expo prebuild` → `npx expo customize metro.config.js`.
 ⚠️ Confirm the current package name against Bitrise docs — docs may still show `@code-push-next/react-native-code-push`; prefer the Bitrise-maintained `@bitrise/code-push-sdk`.
+
+### 3b — Wire the in-app agent sink (app → CI, no backend)
+So a reviewer's in-app **Send** starts the `process_feedback` workflow directly, the app uses
+**`sinkFromEnv()`** (`src/loupe/sinks`): it POSTs a slim feedback payload to Bitrise's
+`/build/start.json` (mapping it to `LOUPE_FEEDBACK_PAYLOAD`) when the build carries
+`EXPO_PUBLIC_LOUPE_APP_SLUG` + `EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN`, and falls back to the console sink otherwise.
+- The **app slug is public** — the `build_apk`/`deliver_*` workflows default it; override with `LOUPE_APP_SLUG`.
+- The **trigger token is a secret**: the user sets **`LOUPE_TRIGGER_TOKEN`** in **Bitrise Secrets** (Bitrise → app → *Settings → Build trigger token*, or *Triggers → Trigger a build via API*). The build step injects it as `EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN` so Expo inlines it into the JS bundle at build time — **never commit it**.
+- **Blast radius:** the token only starts `process_feedback` → a **human-gated PR**. Fine for the prototype tier; graduate to a thin serverless proxy if the app ships to untrusted users (see [`feedback-agent-security.md`](../../../docs/design/feedback-agent-security.md)).
 
 ### 4 — CI workflows (the fingerprint gate)
 - `get_bitrise_yml(app_slug)` → merge in the delivery workflows + trigger map from [`bitrise-ci-pipeline.md`](../../../docs/design/bitrise-ci-pipeline.md) (this repo's [`bitrise.yml`](../../../bitrise.yml) is the source to copy). → `validate_bitrise_yml` → `update_bitrise_yml`.
@@ -119,7 +129,7 @@ The fix-it agent (RDE template **and** the `process_feedback` CI orchestrator) n
 - The RDE template id.
 - The tester group + the Slack channel used for alerts.
 - The first build's public install link.
-- A checklist of anything requiring the user, all set by them (never by you): authorizing MCP; **iOS code signing — only if iOS is a target**; **generating `ANTHROPIC_API_KEY` + `GITHUB_API_TOKEN` for the fix-it agent (step 5b)**; `SLACK_WEBHOOK_URL` for Slack alerts; `CODEPUSH_APP_ID` + `CODEPUSH_API_TOKEN` for OTA — the last four in Bitrise Secrets.
+- A checklist of anything requiring the user, all set by them (never by you): authorizing MCP; **iOS code signing — only if iOS is a target**; **generating `ANTHROPIC_API_KEY` + `GITHUB_API_TOKEN` for the fix-it agent (step 5b)**; **`LOUPE_TRIGGER_TOKEN` so in-app feedback triggers CI (step 3b)**; `SLACK_WEBHOOK_URL` for Slack alerts; `CODEPUSH_APP_ID` + `CODEPUSH_API_TOKEN` for OTA — all but signing in Bitrise Secrets.
 
 ## Verify
 Trigger one JS-only change and one native change; confirm the fingerprint gate routes them to CodePush vs a full build respectively, and that a device receives the OTA update and the push.

@@ -2,7 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { LoupeProvider, LoupeTarget } from './src/loupe';
+import { LoupeProvider, LoupeTarget, sinkFromEnv } from './src/loupe';
 
 /**
  * Example host screen. Wrap the parts you want to be feedback-anchorable in <LoupeTarget>.
@@ -40,7 +40,13 @@ function DemoScreen() {
 export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
-      <LoupeProvider config={{ enabled: true, sink: 'console' }}>
+      {/*
+        sinkFromEnv() routes feedback to the `process_feedback` CI workflow (→ agent → PR) when the
+        build was made with EXPO_PUBLIC_LOUPE_APP_SLUG + EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN set (CI
+        injects the token from a Bitrise Secret). With neither set — e.g. `expo start` locally — it
+        falls back to the console sink.
+      */}
+      <LoupeProvider config={{ enabled: true, sink: sinkFromEnv() }}>
         <DemoScreen />
       </LoupeProvider>
     </GestureHandlerRootView>
