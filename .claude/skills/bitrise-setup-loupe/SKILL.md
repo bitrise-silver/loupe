@@ -42,6 +42,7 @@ Design references (read if a step is unclear): [`docs/design/bitrise-codepush-rd
 | RDE stack + machine | `osx-xcode-16.x` (iOS) or a Linux stack (Android-only) | enumerate live (step 5) |
 | Notification target | **Slack incoming webhook** (optional) | one channel for both OTA + build alerts |
 | Fix route policy | e.g. Change/Idea → agent, Broken → human | maps category → sink |
+| Agent credentials | `ANTHROPIC_API_KEY`, `GITHUB_API_TOKEN` | user generates; you tell them where to set them (step 5b) |
 
 ## Steps
 
@@ -71,6 +72,7 @@ Then: `npm install @bitrise/code-push-sdk` → `npx expo prebuild` → `npx expo
 - `get_bitrise_yml(app_slug)` → merge in the delivery workflows + trigger map from [`bitrise-ci-pipeline.md`](../../../docs/design/bitrise-ci-pipeline.md) (this repo's [`bitrise.yml`](../../../bitrise.yml) is the source to copy). → `validate_bitrise_yml` → `update_bitrise_yml`.
 - **Only wire the platforms requested.** Android-only ⇒ add just `deliver_android` and point the trigger at it — **no signing needed**. Add `deliver_ios` (and the `both` pipeline) **only after step 4b**, since its native route archives a *signed* device build and will fail without signing.
 - Register the incoming webhook if not present (`register_webhook`).
+- The pipeline also includes **`build_apk`** (on-demand native APK for testers) and **`process_feedback`** (the orchestrator that turns an in-app feedback item into a branch + PR via Claude Code — its credentials are step 5b).
 
 ### 4b — Code signing (iOS targets only — SKIP for Android)
 **If the platform list is Android-only, skip this entire step.** Android's release APK is signed automatically with a debug/upload keystore, so `deliver_android` needs no signing setup and can ship to testers as-is.
@@ -86,6 +88,24 @@ These feed the `manage-ios-code-signing@3` + `xcode-archive@5` steps in `deliver
 - `bitrise_devenv_create_saved_input` for a **git-only push SSH key** (no GitHub API, no release secrets — security baseline).
 - `bitrise_devenv_create_template`: warmup installs Claude Code + git/gh + `npm ci`; startup is idempotent; session inputs = repo URL + the feedback payload. This is the environment the runtime feedback→PR loop instantiates per item.
 
+### 5b — Agent credentials (ASK the user to generate these; never enter secrets yourself)
+The fix-it agent (RDE template **and** the `process_feedback` CI orchestrator) needs two credentials. **Ask the user to generate each and paste them into the right store — you must not handle the secret values (Safety rule 3).** Explain *where* each goes, because RDE saved inputs and Bitrise Secrets are **isolated stores**.
+
+**1. `ANTHROPIC_API_KEY`** — authenticates the Claude Code agent.
+- Generate: **https://console.anthropic.com → API keys → Create key**.
+- Set it in **both** stores that read it:
+  - **RDE saved input** `ANTHROPIC_API_KEY` (for agent runs inside an RDE session) — `bitrise_devenv_create_saved_input`, marked secret.
+  - **Bitrise Secrets** `ANTHROPIC_API_KEY` (for the `process_feedback` CI workflow).
+
+**2. `GITHUB_API_TOKEN`** — lets the agent push its branch **and open the PR**.
+- Generate a **fine-grained personal access token** (least privilege): GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+  - **Resource owner** = the repo's org (e.g. `bitrise-silver`); the org may need to allow fine-grained tokens / approve the request.
+  - **Repository access** = Only select repositories → the Loupe repo.
+  - **Permissions**: **Contents → Read and write** (push branches) + **Pull requests → Read and write** (open PRs). (Metadata → Read is auto.)
+- Set it in **Bitrise Secrets** as `GITHUB_API_TOKEN`.
+- **More-locked-down alternative:** skip the token and give the agent only the **git-only `GIT_SSH_PRIVATE_KEY`** deploy key — it pushes a branch and a human opens the PR.
+- Either way, **keep `main` branch-protected (require a PR review)** so the agent can open a PR but never merge — the human-in-the-loop guarantee from the security model holds even with the token.
+
 ### 6 — Distribution + notifications
 - `create_tester_group` + `add_testers_to_tester_group` (toggle auto-notify) for native builds.
 - **Notifications go to Slack** — the single comm channel for both OTA and native (simpler than push: no client SDK, no device tokens, and both CodePush and CI can post). Create a **Slack incoming webhook**, store it as **`SLACK_WEBHOOK_URL`** in **Bitrise Secrets**, and the release workflow's final `script` step posts to it (there is **no CodePush webhook**, so the workflow does it). The step is **guarded** — if `SLACK_WEBHOOK_URL` is unset it skips instead of failing the build. Confirm the webhook with the user first.
@@ -99,7 +119,7 @@ These feed the `manage-ios-code-signing@3` + `xcode-archive@5` steps in `deliver
 - The RDE template id.
 - The tester group + the Slack channel used for alerts.
 - The first build's public install link.
-- A checklist of anything requiring the user (authorizing MCP; **iOS code signing — only if iOS is a target**; setting `SLACK_WEBHOOK_URL` in Bitrise Secrets for Slack alerts; other Bitrise Secrets like `CODEPUSH_API_TOKEN`).
+- A checklist of anything requiring the user, all set by them (never by you): authorizing MCP; **iOS code signing — only if iOS is a target**; **generating `ANTHROPIC_API_KEY` + `GITHUB_API_TOKEN` for the fix-it agent (step 5b)**; `SLACK_WEBHOOK_URL` for Slack alerts; `CODEPUSH_APP_ID` + `CODEPUSH_API_TOKEN` for OTA — the last four in Bitrise Secrets.
 
 ## Verify
 Trigger one JS-only change and one native change; confirm the fingerprint gate routes them to CodePush vs a full build respectively, and that a device receives the OTA update and the push.

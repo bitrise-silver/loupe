@@ -49,6 +49,42 @@ stages:
 
 workflows:
   # ==========================================================================================
+  # build_apk — on-demand, unconditional native Android APK (ignores the fingerprint gate).
+  # Trigger this when you just want an installable APK with the latest code + embedded JS bundle.
+  # ==========================================================================================
+  build_apk:
+    steps:
+      - git-clone@8: {}
+      - restore-npm-cache@3: {}
+      - npm@3:
+          title: npm ci
+          inputs:
+            - command: ci
+      - save-npm-cache@1: {}
+      - script@1:
+          title: Expo prebuild (Android)
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                npx expo prebuild --platform android --no-install
+      - gradle-runner@5:
+          title: Build Android APK (assembleRelease) — bundles the latest JS
+          inputs:
+            - build_root_directory: android
+            - gradle_task: assembleRelease
+            - gradlew_path: gradlew
+      - deploy-to-bitrise-io@2:
+          title: Distribute APK to testers (public install page)
+          inputs:
+            - is_enable_public_page: "true"
+            - notify_user_groups: "none"
+    meta:
+      bitrise.io:
+        stack: ubuntu-noble-24.04-bitrise-2025-android
+        machine_type_id: g2.linux.large
+
+  # ==========================================================================================
   # Android — fingerprint gate: JS-only → CodePush OTA; native change → build + distribute.
   # ==========================================================================================
   deliver_android:
@@ -83,7 +119,13 @@ workflows:
             - content: |-
                 #!/usr/bin/env bash
                 set -euo pipefail
-                echo "Fingerprint HIT → native unchanged → shipping JS over-the-air."
+                echo "Fingerprint HIT → native unchanged → JS-only change; releasing over-the-air via CodePush."
+                # CodePush publish is OPTIONAL — skip (don't fail the build) until its credentials are set.
+                # Put CODEPUSH_APP_ID + CODEPUSH_API_TOKEN in Bitrise Secrets to enable OTA.
+                if [ -z "${CODEPUSH_APP_ID:-}" ] || [ -z "${CODEPUSH_API_TOKEN:-}" ]; then
+                  echo "CODEPUSH_APP_ID / CODEPUSH_API_TOKEN not set — skipping CodePush OTA release (build stays green)."
+                  exit 0
+                fi
                 mkdir -p _codepush/android
                 npx expo export:embed \
                   --platform android --dev false --bytecode \
@@ -92,6 +134,7 @@ workflows:
                   --assets-dest _codepush/android
                 # ⚠️ Confirm exact CLI/flags against Bitrise CodePush docs.
                 bitrise :codepush push \
+                  --app-id "$CODEPUSH_APP_ID" \
                   --platform android \
                   --deployment "$CODEPUSH_DEPLOYMENT" \
                   --app-version "$APP_VERSION" \
@@ -155,6 +198,7 @@ workflows:
           run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
           inputs:
             - is_enable_public_page: "true"
+            - notify_user_groups: "none"
       - script@1:
           title: "[native] Notify reviewers via Slack (new build to install)"
           run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
@@ -214,12 +258,17 @@ workflows:
             - content: |-
                 #!/usr/bin/env bash
                 set -euo pipefail
+                if [ -z "${CODEPUSH_APP_ID:-}" ] || [ -z "${CODEPUSH_API_TOKEN:-}" ]; then
+                  echo "CODEPUSH_APP_ID / CODEPUSH_API_TOKEN not set — skipping CodePush OTA release (build stays green)."
+                  exit 0
+                fi
                 mkdir -p _codepush/ios
                 npx expo export:embed \
                   --platform ios --dev false --bytecode \
                   --entry-file index.ts \
                   --bundle-output _codepush/ios/main.jsbundle --assets-dest _codepush/ios
                 bitrise :codepush push \
+                  --app-id "$CODEPUSH_APP_ID" \
                   --platform ios --deployment "$CODEPUSH_DEPLOYMENT" \
                   --app-version "$APP_VERSION" --bundle _codepush/ios
       # (+ the same [ota] Slack notify step as Android)
@@ -250,7 +299,92 @@ workflows:
           run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
           inputs:
             - is_enable_public_page: "true"
+            - notify_user_groups: "none"
     meta:
       bitrise.io:
         stack: osx-xcode-16.4.x
         machine_type_id: g2.mac.large
+
+  # ==========================================================================================
+  # process_feedback — the ORCHESTRATOR. Turns an in-app feedback item into a branch (+ PR).
+  # Triggered by the app's agent sink with the feedback JSON passed as $LOUPE_FEEDBACK_PAYLOAD.
+  # This is the CI counterpart of the "Loupe feedback→PR agent" RDE template — the same Claude
+  # Code agent, run headlessly in a CI build. A human reviews/merges the PR (security baseline).
+  #
+  # Requires in Bitrise Secrets: ANTHROPIC_API_KEY (the agent's key) and a push credential
+  # (GIT_SSH_PRIVATE_KEY write deploy key, or GITHUB_API_TOKEN). See notes in chat.
+  # ==========================================================================================
+  process_feedback:
+    # No workflow-level LOUPE_FEEDBACK_PAYLOAD default — a workflow env would OVERRIDE the value
+    # the triggering app passes in. The payload comes only from the build-triggered env.
+    steps:
+      - activate-ssh-key@4:
+          run_if: '{{ getenv "GIT_SSH_PRIVATE_KEY" | ne "" }}'
+      - git-clone@8: {}
+      - restore-npm-cache@3: {}
+      - npm@3:
+          title: npm ci
+          inputs:
+            - command: ci
+      - save-npm-cache@1: {}
+      - script@1:
+          title: Feedback → branch (+ PR) via Claude Code (headless)
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                export PATH="$HOME/.local/bin:$PATH"
+
+                # The agent's OWN credential. Bitrise CI reads from Bitrise Secrets — a DIFFERENT store
+                # than your RDE saved inputs — so ANTHROPIC_API_KEY must be set here too (see chat).
+                if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+                  echo "ANTHROPIC_API_KEY not set in Bitrise Secrets — skipping the agent (build stays green)."
+                  exit 0
+                fi
+
+                # Install Claude Code (same as the RDE template's warmup).
+                curl -fsSL https://claude.ai/install.sh | bash || npm i -g @anthropic-ai/claude-code
+
+                # Default to {} safely — `${VAR:-{}}` trips bash brace-matching and appends a stray }.
+                PAYLOAD="${LOUPE_FEEDBACK_PAYLOAD:-}"
+                [ -n "$PAYLOAD" ] || PAYLOAD='{}'
+                STAMP="$(node -p "Date.now()")"
+                BRANCH="loupe/feedback-${STAMP}"
+                git config user.name  "Loupe Agent"
+                git config user.email "loupe-agent@users.noreply.github.com"
+                git checkout -b "$BRANCH"
+
+                # ⚠️ VALIDATE ON FIRST RUN: headless Claude Code flags vary by version; tune as needed.
+                claude -p "You are Loupe's fix-it agent. A non-technical reviewer left this in-app feedback (JSON):
+                ${PAYLOAD}
+                Make the SMALLEST change under src/ or App.tsx that addresses it. Do NOT edit bitrise.yml,
+                app.json, secrets, or native config. One focused edit." \
+                  --permission-mode acceptEdits \
+                  --allowedTools "Read Edit Write" || true
+
+                git add -A
+                if git diff --cached --quiet; then
+                  echo "Agent produced no changes for this feedback item."
+                  exit 0
+                fi
+                git commit -m "Loupe: address in-app feedback (${STAMP})"
+
+                # Authenticate the PUSH. Prefer GITHUB_API_TOKEN over HTTPS; else rely on the SSH deploy key.
+                if [ -n "${GITHUB_API_TOKEN:-}" ]; then
+                  SLUG="$(git config --get remote.origin.url | sed -E 's#(git@github.com:|https://[^/]*/)##; s#\.git$##')"
+                  git remote set-url origin "https://x-access-token:${GITHUB_API_TOKEN}@github.com/${SLUG}.git"
+                fi
+                git push origin "$BRANCH"
+
+                # Open the PR (needs the token). Otherwise the pushed branch is ready for a human to PR.
+                if [ -n "${GITHUB_API_TOKEN:-}" ] && command -v gh >/dev/null; then
+                  GH_TOKEN="$GITHUB_API_TOKEN" gh pr create --base main --head "$BRANCH" \
+                    --title "Loupe: in-app feedback fix" \
+                    --body "Automated from an in-app feedback item. Review before merge." || true
+                else
+                  echo "Pushed branch ${BRANCH} — open a PR from it (no GitHub API token configured)."
+                fi
+    meta:
+      bitrise.io:
+        stack: ubuntu-noble-24.04-bitrise-2025-android
+        machine_type_id: g2.linux.large
