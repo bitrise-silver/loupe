@@ -12,7 +12,7 @@ sequenceDiagram
     participant CI as Bitrise CI
     participant CP as Bitrise CodePush
     participant BD as Build distribution
-    participant N as FCM push
+    participant N as Slack
 
     U->>SDK: tap the part + say what to change
     SDK->>SDK: capture {component, testID, file:line, props, screenshot, context}
@@ -26,8 +26,8 @@ sequenceDiagram
         CI->>BD: full build → public install page
         BD-->>U: install new binary
     end
-    CI->>N: send to FCM topic (from a CI step)
-    N-->>U: "your change is in" → tap pin → verify ✅
+    CI->>N: post to Slack (from a CI step)
+    N-->>U: "new version ready" → install / restart → verify ✅
 ```
 
 ## Components
@@ -38,7 +38,7 @@ sequenceDiagram
 | **Build-time** | `babel-plugin-loupe-source` + `@expo/fingerprint` | Inject the source anchor; hash the native layer for routing | [capture](./design/screenshot-feedback-capture.md), [CI](./design/bitrise-ci-pipeline.md) |
 | **Fix compute** | Bitrise RDE | Where feedback becomes a PR — a human via remote access, or a Claude Code agent | [architecture](./design/bitrise-codepush-rde-architecture.md), [security](./design/feedback-agent-security.md) |
 | **Release** | Bitrise CI + CodePush + build distribution | The fingerprint gate routes to OTA or a full build | [CI pipeline](./design/bitrise-ci-pipeline.md) |
-| **Delivery** | Static `iterations.json` + FCM topics | In-app iterations list + new-version push — **no backend** | [iterations & notifications](./design/iterations-and-notifications.md) |
+| **Delivery** | Static `iterations.json` + **Slack** | In-app iterations list + new-version alerts in Slack — **no backend** | [iterations & notifications](./design/iterations-and-notifications.md) |
 
 ## Three load-bearing ideas
 
@@ -46,7 +46,7 @@ sequenceDiagram
 
 2. **The sink is pluggable: human *or* AI.** One normalized payload; a sink adapter routes it to a tracker (Linear/Jira/GitHub/Slack) or to an AI coding agent running in an RDE that opens a PR. Chosen per feedback category, never by the reviewer. → [Bitrise architecture](./design/bitrise-codepush-rde-architecture.md)
 
-3. **Backend-optional.** For an early-stage team the iterations list is a static manifest the CI writes, and notifications are FCM-topic sends from a CI step — **no server or database** until you need per-user targeting, metrics, or private distribution. → [iterations & notifications](./design/iterations-and-notifications.md)
+3. **Backend-optional.** For an early-stage team the iterations list is a static manifest the CI writes, and **new-version alerts are Slack messages from a CI step** — one channel for both OTA and native releases, and **no server, database, or push service** until you need per-user targeting, metrics, or private distribution. → [iterations & notifications](./design/iterations-and-notifications.md)
 
 ## Vendor posture
 

@@ -6,13 +6,19 @@
 # This is the concrete implementation of docs/design/bitrise-ci-pipeline.md — read that for the
 # full annotated rationale, the iOS code-signing notes, and the "install any iteration" registry.
 #
-# Secrets (set in Bitrise Secrets, NOT here): CODEPUSH_API_TOKEN, NOTIFY_FCM_SA_JSON, FCM_PROJECT_ID,
-# plus the Apple service connection + signing files for the iOS native route.
+# Secrets (set in Bitrise Secrets, NOT here): CODEPUSH_API_TOKEN, SLACK_WEBHOOK_URL,
+# plus the Apple service connection + signing files for the iOS native route (iOS only).
 # ⚠️ Confirm the CodePush CLI flags/package against current Bitrise docs before first run.
 
 format_version: "23"
 default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 project_type: react-native
+
+# Default stack for the app; each workflow's `meta.bitrise.io.stack` overrides this.
+meta:
+  bitrise.io:
+    stack: ubuntu-noble-24.04-bitrise-2025-android
+    machine_type_id: g2.linux.large
 
 tools:
   nodejs: 22.23.1
@@ -91,22 +97,23 @@ workflows:
                   --app-version "$APP_VERSION" \
                   --bundle _codepush/android
       - script@1:
-          title: "[ota] Notify testers via FCM topic"
+          title: "[ota] Notify reviewers via Slack"
           run_if: '{{ not (enveq "BITRISE_CACHE_HIT" "false") }}'
           inputs:
             - content: |-
                 #!/usr/bin/env bash
                 set -euo pipefail
-                # No CodePush webhook exists, so the workflow sends the push itself (FCM HTTP v1).
-                printf '%s' "$NOTIFY_FCM_SA_JSON" > /tmp/sa.json
-                export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json
-                TOKEN="$(gcloud auth application-default print-access-token \
-                          --scopes=https://www.googleapis.com/auth/firebase.messaging)"
-                curl -fsS -X POST "https://fcm.googleapis.com/v1/projects/${FCM_PROJECT_ID}/messages:send" \
-                  -H "Authorization: Bearer ${TOKEN}" -H 'content-type: application/json' -d "{
-                    \"message\": { \"topic\": \"iterations-${CODEPUSH_DEPLOYMENT}\",
-                      \"notification\": { \"title\": \"New iteration ready\",
-                                          \"body\": \"Tap to install ${APP_VERSION}\" } } }"
+                # No CodePush webhook exists, so the workflow posts to Slack itself.
+                # SLACK_WEBHOOK_URL is an OPTIONAL Slack incoming-webhook in Bitrise Secrets — if it's
+                # absent, skip quietly instead of failing the build (${VAR:-} avoids set -u errors).
+                if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+                  echo "SLACK_WEBHOOK_URL not set — skipping Slack notification."
+                  exit 0
+                fi
+                curl -fsS -X POST "$SLACK_WEBHOOK_URL" \
+                  -H 'content-type: application/json' \
+                  -d "{\"text\": \":arrows_counterclockwise: *New Loupe OTA iteration* — v${APP_VERSION} on *${CODEPUSH_DEPLOYMENT}*. Restart the app to pull it.\"}" \
+                  || echo "Slack notification failed (non-fatal)."
 
       # ---- ROUTE B · fingerprint MISS = native change = build + distribute ----
       - script@1:
@@ -148,6 +155,23 @@ workflows:
           run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
           inputs:
             - is_enable_public_page: "true"
+      - script@1:
+          title: "[native] Notify reviewers via Slack (new build to install)"
+          run_if: '{{ enveq "BITRISE_CACHE_HIT" "false" }}'
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                # BITRISE_PUBLIC_INSTALL_PAGE_URL is exported by deploy-to-bitrise-io when the public page is enabled.
+                # Slack is optional — skip if the webhook secret isn't set, and never fail the build on a notify error.
+                if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+                  echo "SLACK_WEBHOOK_URL not set — skipping Slack notification."
+                  exit 0
+                fi
+                curl -fsS -X POST "$SLACK_WEBHOOK_URL" \
+                  -H 'content-type: application/json' \
+                  -d "{\"text\": \":package: *New Loupe native build* — v${APP_VERSION} (APK). Install: ${BITRISE_PUBLIC_INSTALL_PAGE_URL}\"}" \
+                  || echo "Slack notification failed (non-fatal)."
     meta:
       bitrise.io:
         stack: ubuntu-noble-24.04-bitrise-2025-android
@@ -198,7 +222,7 @@ workflows:
                 bitrise :codepush push \
                   --platform ios --deployment "$CODEPUSH_DEPLOYMENT" \
                   --app-version "$APP_VERSION" --bundle _codepush/ios
-      # (+ the same [ota] FCM notify step as Android)
+      # (+ the same [ota] Slack notify step as Android)
 
       # ---- ROUTE B · native = signed device archive + distribute ----
       - script@1:

@@ -3,6 +3,8 @@
 *Concrete designs for feature #2 (an in-app timeline of iterations you can install any of) and #4 (notify testers when a new iteration is ready), and the answer to the load-bearing question: **do they need a backend?***
 
 > Companion to the [Bitrise-native architecture](./bitrise-codepush-rde-architecture.md) (§3.3–3.4 sketch these; this doc makes them concrete and verified against current 2026 docs).
+>
+> **⚠️ Project decision (updated):** Loupe now ships new-version alerts via **Slack**, not push/FCM — one channel for both OTA and native releases, no client SDK, no device tokens, and CI posts it directly. The FCM-topic design below is kept as the researched **alternative** for when you later need per-user or on-device push. Source of truth: [`../architecture.md`](../architecture.md) and the repo's `bitrise.yml`.
 
 ---
 

@@ -14,6 +14,20 @@
     "android": {
       "package": "dev.loupe.example"
     },
-    "plugins": []
+    "plugins": [
+      [
+        "@bitrise/code-push-sdk/expo",
+        {
+          "ios": {
+            "CodePushDeploymentKey": "YOUR_CODEPUSH_DEPLOYMENT_KEY",
+            "CodePushServerURL": "https://YOUR_WORKSPACE_SLUG.codepush.bitrise.io"
+          },
+          "android": {
+            "CodePushDeploymentKey": "YOUR_CODEPUSH_DEPLOYMENT_KEY",
+            "CodePushServerURL": "https://YOUR_WORKSPACE_SLUG.codepush.bitrise.io"
+          }
+        }
+      ]
+    ]
   }
 }

@@ -20,7 +20,7 @@ Design references (read if a step is unclear): [`docs/design/bitrise-codepush-rd
 
 1. **Read before you write.** List/get first; show the user what exists before creating anything.
 2. **Confirm every mutating step.** Creating deployments, editing `bitrise.yml`, creating an RDE template, triggering builds — state exactly what you'll do and get a "yes."
-3. **Never commit secrets.** Deployment keys go in `app.json` (they are *not* secrets); the Bitrise API token, Firebase service account, and signing creds go in **Bitrise Secrets** — never in `bitrise.yml` or the repo.
+3. **Never commit secrets.** Deployment keys go in `app.json` (they are *not* secrets); the Bitrise API token, the Slack webhook URL, and signing creds go in **Bitrise Secrets** — never in `bitrise.yml` or the repo.
 4. **Apply the prototype security baseline** from the security doc: the RDE agent template gets a git-only push key and **no release secrets**; a human approves PRs before merge/release.
 
 ## Prerequisites
@@ -29,7 +29,7 @@ Design references (read if a step is unclear): [`docs/design/bitrise-codepush-rd
 - A **Bitrise app** connected to the repo (or create one in step 1).
 - The mobile app is an **Expo prebuild** app (this repo). CodePush + notifications need a **dev/custom build**, not Expo Go.
 - **Platform decides code signing.** **Android needs none** — the release APK is signed with a debug/upload keystore automatically, so you can ship to testers with zero signing setup. **iOS requires code signing** (Apple service connection + distribution certificate + ad-hoc/enterprise provisioning profile + registered device UDIDs). If the user doesn't want to deal with iOS signing yet, set up **Android-only** and add iOS later.
-- Optional (for notifications): a **Firebase project** with an APNs `.p8` uploaded, and its service-account JSON.
+- Optional (for notifications): a **Slack incoming webhook** URL. CI posts new-version messages to Slack for both OTA and native releases; if the webhook isn't set, builds skip the notification (they don't fail).
 
 ## Inputs to gather up front
 
@@ -40,7 +40,7 @@ Design references (read if a step is unclear): [`docs/design/bitrise-codepush-rd
 | Platforms | `android` (start here) or `ios, android` | **iOS pulls in the code-signing step (4b); Android skips it entirely.** Ask this first. |
 | Deployment names | `Staging`, `Production` | plus optional per-branch preview channels |
 | RDE stack + machine | `osx-xcode-16.x` (iOS) or a Linux stack (Android-only) | enumerate live (step 5) |
-| Notification target | FCM topic `iterations-staging` | or Slack webhook |
+| Notification target | **Slack incoming webhook** (optional) | one channel for both OTA + build alerts |
 | Fix route policy | e.g. Change/Idea → agent, Broken → human | maps category → sink |
 
 ## Steps
@@ -88,7 +88,7 @@ These feed the `manage-ios-code-signing@3` + `xcode-archive@5` steps in `deliver
 
 ### 6 — Distribution + notifications
 - `create_tester_group` + `add_testers_to_tester_group` (toggle auto-notify) for native builds.
-- For OTA/new-version pushes: devices subscribe to an **FCM topic** client-side; add a final `script` step to the release workflow that sends to the topic via FCM **HTTP v1** using a service-account JSON in **Bitrise Secrets** (see iterations-and-notifications doc). There is **no CodePush webhook**, so the workflow emits the push itself.
+- **Notifications go to Slack** — the single comm channel for both OTA and native (simpler than push: no client SDK, no device tokens, and both CodePush and CI can post). Create a **Slack incoming webhook**, store it as **`SLACK_WEBHOOK_URL`** in **Bitrise Secrets**, and the release workflow's final `script` step posts to it (there is **no CodePush webhook**, so the workflow does it). The step is **guarded** — if `SLACK_WEBHOOK_URL` is unset it skips instead of failing the build. Confirm the webhook with the user first.
 
 ### 7 — First build + deliver
 - `trigger_bitrise_build(workflow=deliver_android)` for the first build — **no signing, the best Android-first starting point**. (Use `deliver_ios` only once step 4b is complete.) → poll `get_build` → `list_installable_artifacts` → `set_installable_artifact_public_install_page` → share the install link with the user (or notify the tester group).
@@ -97,9 +97,9 @@ These feed the `manage-ios-code-signing@3` + `xcode-archive@5` steps in `deliver
 - Deployment names + which key went into `app.json` (and where Production's key lives).
 - The workflows added to `bitrise.yml`.
 - The RDE template id.
-- The tester group + notification topic.
+- The tester group + the Slack channel used for alerts.
 - The first build's public install link.
-- A checklist of anything requiring the user (authorizing MCP; **iOS code signing — only if iOS is a target**; uploading the APNs `.p8` if notifications are on; setting Bitrise Secrets).
+- A checklist of anything requiring the user (authorizing MCP; **iOS code signing — only if iOS is a target**; setting `SLACK_WEBHOOK_URL` in Bitrise Secrets for Slack alerts; other Bitrise Secrets like `CODEPUSH_API_TOKEN`).
 
 ## Verify
 Trigger one JS-only change and one native change; confirm the fingerprint gate routes them to CodePush vs a full build respectively, and that a device receives the OTA update and the push.

@@ -18,6 +18,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bitrise/code-push-sdk": "^10.5.1",
+    "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.25",
     "expo-constants": "~18.0.0",
     "expo-device": "~8.0.0",

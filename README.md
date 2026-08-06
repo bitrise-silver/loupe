@@ -30,7 +30,7 @@ tap the part → say what to change → (human or AI) fixes → fingerprint deci
 - **Component-anchored, not pixel-anchored** — the differentiator. See [`docs/design/screenshot-feedback-capture.md`](docs/design/screenshot-feedback-capture.md).
 - **Expo as *framework*, Bitrise as *infra*** — Expo (via `expo prebuild`/CNG) for the app; **Bitrise CodePush** for OTA + **Bitrise CI** for builds + **Bitrise RDE** for the fix-it compute. No EAS, no Expo Updates, no Expo push. See [`docs/architecture.md`](docs/architecture.md).
 - **The `@expo/fingerprint` hash is the release router** — unchanged native layer ⇒ OTA; changed ⇒ full build. See [`docs/design/bitrise-ci-pipeline.md`](docs/design/bitrise-ci-pipeline.md).
-- **No backend required** to start — the iterations list is a static manifest written by CI; notifications are FCM-topic sends from CI. See [`docs/design/iterations-and-notifications.md`](docs/design/iterations-and-notifications.md).
+- **No backend required** to start — the iterations list is a static manifest written by CI; new-version alerts are **Slack messages from CI** (one channel for both OTA and native). See [`docs/design/iterations-and-notifications.md`](docs/design/iterations-and-notifications.md).
 - **Security right-sized to your stage** — a 6-control baseline for a <5-person team, graduating as you grow. See [`docs/design/feedback-agent-security.md`](docs/design/feedback-agent-security.md).
 
 ## Quickstart
