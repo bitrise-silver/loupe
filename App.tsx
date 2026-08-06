@@ -32,6 +32,11 @@ function DemoScreen() {
         </Pressable>
       </LoupeTarget>
 
+      <Text style={styles.diag}>
+        Loupe diagA · sink={sinkFromEnv().name} · tok=
+        {process.env.EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN ? 'set' : 'MISSING'}
+      </Text>
+
       <StatusBar style="auto" />
     </SafeAreaView>
   );
@@ -67,4 +72,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonText: { color: 'white', fontSize: 16, fontWeight: '600' },
+  diag: { marginTop: 'auto', textAlign: 'center', fontSize: 12, color: '#6b7280' },
 });
