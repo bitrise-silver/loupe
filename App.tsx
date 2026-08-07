@@ -71,11 +71,14 @@ function App() {
   );
 }
 
-// Wrap the root so CodePush checks Bitrise for a JS update on app start and installs it on the
-// next restart. Deployment key + server URL come from app.json (baked into the binary at prebuild).
+// Wrap the root so CodePush checks Bitrise for a JS update on cold start AND every time the app
+// returns to the foreground (ON_APP_RESUME), then installs a downloaded update on the next resume
+// once the app has been backgrounded ≥10s — so updates apply by backgrounding + reopening, with no
+// full close+relaunch. Deployment key + server URL come from app.json (baked in at prebuild).
 export default codePush({
-  checkFrequency: codePush.CheckFrequency.ON_APP_START,
-  installMode: codePush.InstallMode.ON_NEXT_RESTART,
+  checkFrequency: codePush.CheckFrequency.ON_APP_RESUME,
+  installMode: codePush.InstallMode.ON_NEXT_RESUME,
+  minimumBackgroundDuration: 10,
 })(App);
 
 const styles = StyleSheet.create({
