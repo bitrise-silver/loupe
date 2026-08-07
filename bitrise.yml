@@ -164,14 +164,16 @@ workflows:
                   echo "CODEPUSH_APP_ID / CODEPUSH_API_TOKEN not set — skipping CodePush OTA release (build stays green)."
                   exit 0
                 fi
-                # The `bitrise :codepush` plugin reads the Bitrise API token from BITRISE_API_TOKEN,
-                # and bundles the JS itself (npm install + Metro), so no pre-bundle step is needed.
+                # The `bitrise :codepush` plugin reads the token from BITRISE_API_TOKEN and, given
+                # --bundle <dir>, generates the JS bundle itself (npm install + Metro) into it.
                 export BITRISE_API_TOKEN="${CODEPUSH_API_TOKEN}"
+                mkdir -p _codepush/android
                 bitrise :codepush push \
                   --app-id "$CODEPUSH_APP_ID" \
                   --platform android \
                   --deployment "$CODEPUSH_DEPLOYMENT" \
-                  --app-version "$APP_VERSION"
+                  --app-version "$APP_VERSION" \
+                  --bundle _codepush/android
       - script@1:
           title: "[ota] Notify reviewers via Slack"
           run_if: '{{ not (enveq "BITRISE_CACHE_HIT" "false") }}'
@@ -314,13 +316,15 @@ workflows:
                   echo "CODEPUSH_APP_ID / CODEPUSH_API_TOKEN not set — skipping CodePush OTA release (build stays green)."
                   exit 0
                 fi
-                # The `bitrise :codepush` plugin reads the Bitrise API token from BITRISE_API_TOKEN,
-                # and bundles the JS itself, so no pre-bundle step is needed.
+                # The `bitrise :codepush` plugin reads the token from BITRISE_API_TOKEN and, given
+                # --bundle <dir>, generates the JS bundle itself into it.
                 export BITRISE_API_TOKEN="${CODEPUSH_API_TOKEN}"
+                mkdir -p _codepush/ios
                 bitrise :codepush push \
                   --app-id "$CODEPUSH_APP_ID" \
                   --platform ios --deployment "$CODEPUSH_DEPLOYMENT" \
-                  --app-version "$APP_VERSION"
+                  --app-version "$APP_VERSION" \
+                  --bundle _codepush/ios
       # (+ the same [ota] Slack notify step as Android)
 
       # ---- ROUTE B · native = signed device archive + distribute ----
