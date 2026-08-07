@@ -431,7 +431,14 @@ workflows:
                   SLUG="$(git config --get remote.origin.url | sed -E 's#(git@github.com:|https://[^/]*/)##; s#\.git$##')"
                   git remote set-url origin "https://x-access-token:${GITHUB_API_TOKEN}@github.com/${SLUG}.git"
                 fi
-                git push origin "$BRANCH"
+                # Retry the push — "fatal error in commit_refs" is a transient GitHub server error,
+                # and one flaky push shouldn't drop the whole feedback item.
+                for attempt in 1 2 3 4 5; do
+                  git push origin "$BRANCH" && break
+                  [ "$attempt" = 5 ] && { echo "push failed after 5 attempts"; exit 1; }
+                  echo "push attempt ${attempt} failed (transient?); retrying in $((attempt * 5))s..."
+                  sleep $((attempt * 5))
+                done
 
                 # Open the PR (needs the token). Otherwise the pushed branch is ready for a human to PR.
                 if [ -n "${GITHUB_API_TOKEN:-}" ] && command -v gh >/dev/null; then
