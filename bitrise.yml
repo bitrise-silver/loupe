@@ -164,19 +164,14 @@ workflows:
                   echo "CODEPUSH_APP_ID / CODEPUSH_API_TOKEN not set — skipping CodePush OTA release (build stays green)."
                   exit 0
                 fi
-                mkdir -p _codepush/android
-                npx expo export:embed \
-                  --platform android --dev false --bytecode \
-                  --entry-file index.ts \
-                  --bundle-output _codepush/android/index.android.bundle \
-                  --assets-dest _codepush/android
-                # ⚠️ Confirm exact CLI/flags against Bitrise CodePush docs.
+                # The `bitrise :codepush` plugin reads the Bitrise API token from BITRISE_API_TOKEN,
+                # and bundles the JS itself (npm install + Metro), so no pre-bundle step is needed.
+                export BITRISE_API_TOKEN="${CODEPUSH_API_TOKEN}"
                 bitrise :codepush push \
                   --app-id "$CODEPUSH_APP_ID" \
                   --platform android \
                   --deployment "$CODEPUSH_DEPLOYMENT" \
-                  --app-version "$APP_VERSION" \
-                  --bundle _codepush/android
+                  --app-version "$APP_VERSION"
       - script@1:
           title: "[ota] Notify reviewers via Slack"
           run_if: '{{ not (enveq "BITRISE_CACHE_HIT" "false") }}'
@@ -319,15 +314,13 @@ workflows:
                   echo "CODEPUSH_APP_ID / CODEPUSH_API_TOKEN not set — skipping CodePush OTA release (build stays green)."
                   exit 0
                 fi
-                mkdir -p _codepush/ios
-                npx expo export:embed \
-                  --platform ios --dev false --bytecode \
-                  --entry-file index.ts \
-                  --bundle-output _codepush/ios/main.jsbundle --assets-dest _codepush/ios
+                # The `bitrise :codepush` plugin reads the Bitrise API token from BITRISE_API_TOKEN,
+                # and bundles the JS itself, so no pre-bundle step is needed.
+                export BITRISE_API_TOKEN="${CODEPUSH_API_TOKEN}"
                 bitrise :codepush push \
                   --app-id "$CODEPUSH_APP_ID" \
                   --platform ios --deployment "$CODEPUSH_DEPLOYMENT" \
-                  --app-version "$APP_VERSION" --bundle _codepush/ios
+                  --app-version "$APP_VERSION"
       # (+ the same [ota] Slack notify step as Android)
 
       # ---- ROUTE B · native = signed device archive + distribute ----
