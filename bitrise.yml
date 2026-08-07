@@ -448,6 +448,109 @@ workflows:
                 else
                   echo "Pushed branch ${BRANCH} — open a PR from it (no GitHub API token configured)."
                 fi
+
+                # Publish this change to the review channel so the reviewer sees it live and can act
+                # on it in-app. The CodePush update description carries the PR number for the banner.
+                if [ -n "${GITHUB_API_TOKEN:-}" ] && [ -n "${CODEPUSH_APP_ID:-}" ] && [ -n "${CODEPUSH_API_TOKEN:-}" ]; then
+                  PR_NUM="$(GH_TOKEN="$GITHUB_API_TOKEN" gh pr view "$BRANCH" --json number -q .number 2>/dev/null || echo '')"
+                  if [ -n "$PR_NUM" ]; then
+                    export BITRISE_API_TOKEN="$CODEPUSH_API_TOKEN"
+                    APP_VERSION="$(node -p "require('./app.json').expo.version")"
+                    mkdir -p _codepush/android
+                    bitrise :codepush push --app-id "$CODEPUSH_APP_ID" --platform android \
+                      --deployment "$CODEPUSH_DEPLOYMENT" --app-version "$APP_VERSION" \
+                      --bundle _codepush/android --description "loupe-pr:${PR_NUM}" \
+                      || echo "preview publish failed (non-fatal — review the PR on GitHub)."
+                  fi
+                fi
+    meta:
+      bitrise.io:
+        stack: ubuntu-noble-24.04-bitrise-2025-android
+        machine_type_id: g2.linux.large
+
+  # ==========================================================================================
+  # apply_decision — the reviewer's in-app verdict on a feedback PR (keep | improve | scrap).
+  # Triggered from the app's Review banner via /build/start.json with LOUPE_PR_NUMBER + LOUPE_DECISION.
+  #   keep    → merge the PR to main (deliver_android ships it to everyone via OTA)
+  #   improve → re-run the agent on the SAME PR branch with a follow-up note, re-publish the preview
+  #   scrap   → close the PR + roll back the review channel to the previous release
+  # ==========================================================================================
+  apply_decision:
+    steps:
+      - activate-ssh-key@4:
+          run_if: '{{ getenv "GIT_SSH_PRIVATE_KEY" | ne "" }}'
+      - git-clone@8: {}
+      - restore-npm-cache@3: {}
+      - npm@3:
+          title: npm ci
+          inputs:
+            - command: ci
+      - save-npm-cache@1: {}
+      - script@1:
+          title: "Apply reviewer decision (keep | improve | scrap)"
+          inputs:
+            - content: |-
+                #!/usr/bin/env bash
+                set -euo pipefail
+                export PATH="$HOME/.local/bin:$PATH"
+                PR="${LOUPE_PR_NUMBER:-}"
+                DECISION="${LOUPE_DECISION:-}"
+                { [ -n "$PR" ] && [ -n "$DECISION" ]; } || { echo "LOUPE_PR_NUMBER + LOUPE_DECISION required"; exit 1; }
+                [ -n "${GITHUB_API_TOKEN:-}" ] || { echo "GITHUB_API_TOKEN required in Bitrise Secrets"; exit 1; }
+                export GH_TOKEN="$GITHUB_API_TOKEN"
+                SLUG="$(git config --get remote.origin.url | sed -E 's#(git@github.com:|https://[^/]*/)##; s#\.git$##')"
+                git remote set-url origin "https://x-access-token:${GITHUB_API_TOKEN}@github.com/${SLUG}.git"
+                git config user.name  "Loupe Agent"
+                git config user.email "loupe-agent@users.noreply.github.com"
+
+                case "$DECISION" in
+                  keep)
+                    gh pr merge "$PR" --squash --delete-branch
+                    echo "Merged PR #$PR → main; deliver_android will ship it to ${CODEPUSH_DEPLOYMENT}."
+                    ;;
+                  scrap)
+                    gh pr close "$PR" --delete-branch || true
+                    if [ -n "${CODEPUSH_APP_ID:-}" ] && [ -n "${CODEPUSH_API_TOKEN:-}" ]; then
+                      export BITRISE_API_TOKEN="$CODEPUSH_API_TOKEN"
+                      bitrise :codepush rollback --app-id "$CODEPUSH_APP_ID" --platform android \
+                        --deployment "$CODEPUSH_DEPLOYMENT" || echo "rollback failed (non-fatal)."
+                    fi
+                    echo "Closed PR #$PR and rolled back ${CODEPUSH_DEPLOYMENT}."
+                    ;;
+                  improve)
+                    [ -n "${ANTHROPIC_API_KEY:-}" ] || { echo "ANTHROPIC_API_KEY required for improve"; exit 1; }
+                    curl -fsSL https://claude.ai/install.sh | bash || npm i -g @anthropic-ai/claude-code
+                    BRANCH="$(gh pr view "$PR" --json headRefName -q .headRefName)"
+                    git fetch origin "$BRANCH"
+                    git checkout "$BRANCH"
+                    PAYLOAD="${LOUPE_FEEDBACK_PAYLOAD:-}"
+                    [ -n "$PAYLOAD" ] || PAYLOAD='{}'
+                    claude -p "Refine the existing change on this branch per the reviewer's follow-up (JSON):
+                    ${PAYLOAD}
+                    Make the SMALLEST change under src/ or App.tsx. Do NOT edit bitrise.yml, app.json, secrets." \
+                      --permission-mode acceptEdits --allowedTools "Read Edit Write" || true
+                    git add -A
+                    if git diff --cached --quiet; then echo "No refinement produced."; exit 0; fi
+                    git commit -m "Loupe: refine PR #$PR per reviewer feedback"
+                    for a in 1 2 3 4 5; do
+                      git push origin "$BRANCH" && break
+                      [ "$a" = 5 ] && { echo "push failed after 5 attempts"; exit 1; }
+                      sleep $((a * 5))
+                    done
+                    if [ -n "${CODEPUSH_APP_ID:-}" ] && [ -n "${CODEPUSH_API_TOKEN:-}" ]; then
+                      export BITRISE_API_TOKEN="$CODEPUSH_API_TOKEN"
+                      APP_VERSION="$(node -p "require('./app.json').expo.version")"
+                      mkdir -p _codepush/android
+                      bitrise :codepush push --app-id "$CODEPUSH_APP_ID" --platform android \
+                        --deployment "$CODEPUSH_DEPLOYMENT" --app-version "$APP_VERSION" \
+                        --bundle _codepush/android --description "loupe-pr:${PR}" || echo "re-publish failed (non-fatal)."
+                    fi
+                    echo "Refined PR #$PR."
+                    ;;
+                  *)
+                    echo "Unknown decision: $DECISION"; exit 1
+                    ;;
+                esac
     meta:
       bitrise.io:
         stack: ubuntu-noble-24.04-bitrise-2025-android

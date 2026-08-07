@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-import { LoupeProvider, LoupeTarget, sinkFromEnv } from './src/loupe';
+import { LoupeProvider, LoupeTarget, ReviewBanner, sinkFromEnv } from './src/loupe';
 
 /**
  * Example host screen. Wrap the parts you want to be feedback-anchorable in <LoupeTarget>.
@@ -66,6 +66,7 @@ function App() {
       <LoupeProvider config={{ enabled: true, sink: sinkFromEnv() }}>
         <DemoScreen />
       </LoupeProvider>
+      <ReviewBanner />
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

@@ -3,6 +3,7 @@
 export { LoupeProvider } from './LoupeProvider';
 export { LoupeTarget } from './registry/LoupeTarget';
 export { useLoupe } from './hooks/useLoupe';
+export { ReviewBanner } from './review/ReviewBanner';
 
 export {
   consoleSink,
@@ -10,8 +11,10 @@ export {
   createAgentSink,
   createBitriseTriggerSink,
   sinkFromEnv,
+  createDecisionSender,
   resolveSink,
 } from './sinks';
+export type { ReviewDecision } from './sinks';
 
 export type {
   LoupeConfig,

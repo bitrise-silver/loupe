@@ -122,6 +122,52 @@ export function resolveSink(spec: SinkSpec | undefined): Sink {
   return spec;
 }
 
+export type ReviewDecision = 'keep' | 'improve' | 'scrap';
+
+/**
+ * The reviewer's verdict on a feedback change (a PR). Triggers the `apply_decision` CI workflow:
+ * `keep` → merge the PR to main (ships via OTA); `scrap` → close the PR + roll back the preview;
+ * `improve` → send a follow-up note that refines the SAME PR. Same EXPO_PUBLIC_* build-time config
+ * as the feedback sink (and the same blast radius); returns null when unconfigured.
+ */
+export function createDecisionSender():
+  | ((prNumber: number, decision: ReviewDecision, note?: string) => Promise<void>)
+  | null {
+  const appSlug = process.env.EXPO_PUBLIC_LOUPE_APP_SLUG;
+  const triggerToken = process.env.EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN;
+  if (!appSlug || !triggerToken) return null;
+  return async (prNumber, decision, note) => {
+    const environments: { mapped_to: string; value: string; is_expand: boolean }[] = [
+      { mapped_to: 'LOUPE_PR_NUMBER', value: String(prNumber), is_expand: false },
+      { mapped_to: 'LOUPE_DECISION', value: decision, is_expand: false },
+    ];
+    if (note) {
+      environments.push({
+        mapped_to: 'LOUPE_FEEDBACK_PAYLOAD',
+        value: JSON.stringify({ annotations: [{ comment: note, category: 'change' }] }),
+        is_expand: false,
+      });
+    }
+    const res = await fetch(`https://app.bitrise.io/app/${appSlug}/build/start.json`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        hook_info: { type: 'bitrise', build_trigger_token: triggerToken },
+        build_params: { branch: 'main', workflow_id: 'apply_decision', environments },
+      }),
+    });
+    const body = await res.text().catch(() => '');
+    let started = res.ok;
+    try {
+      const json = JSON.parse(body) as { status?: string; build_slug?: string; build_url?: string };
+      started = json.status === 'ok' || Boolean(json.build_slug) || Boolean(json.build_url);
+    } catch {
+      /* non-JSON — fall back to HTTP status */
+    }
+    if (!started) throw new Error(`apply_decision didn't start (HTTP ${res.status}):\n${body.slice(0, 300)}`);
+  };
+}
+
 /** Small, agent-ready projection of a payload (drops screenshot bytes; keeps comment + anchor). */
 function compact(p: FeedbackPayload) {
   return {
