@@ -1,8 +1,9 @@
 import codePush from '@bitrise/code-push-sdk';
 import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { LoupeProvider, LoupeTarget, sinkFromEnv } from './src/loupe';
 
@@ -21,7 +22,7 @@ function DemoScreen() {
     );
   }, []);
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <LoupeTarget name="Header">
         <Text style={styles.h1}>Loupe demo</Text>
       </LoupeTarget>
@@ -54,7 +55,8 @@ function DemoScreen() {
 
 function App() {
   return (
-    <GestureHandlerRootView style={styles.root}>
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={styles.root}>
       {/*
         sinkFromEnv() routes feedback to the `process_feedback` CI workflow (→ agent → PR) when the
         build was made with EXPO_PUBLIC_LOUPE_APP_SLUG + EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN set (CI
@@ -64,7 +66,8 @@ function App() {
       <LoupeProvider config={{ enabled: true, sink: sinkFromEnv() }}>
         <DemoScreen />
       </LoupeProvider>
-    </GestureHandlerRootView>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }
 
