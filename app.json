@@ -23,8 +23,8 @@
             "CodePushServerURL": "https://YOUR_WORKSPACE_SLUG.codepush.bitrise.io"
           },
           "android": {
-            "CodePushDeploymentKey": "YOUR_CODEPUSH_DEPLOYMENT_KEY",
-            "CodePushServerURL": "https://YOUR_WORKSPACE_SLUG.codepush.bitrise.io"
+            "CodePushDeploymentKey": "V8A0yr9PQb3Iz2ygUeT85HhdWDhLNjJhNTI0ZWUtMWViOS00ZDEwLWJmMjItMDk2NzU2YTY5NzIy",
+            "CodePushServerURL": "https://1silvercast.codepush.bitrise.io"
           }
         }
       ]
