@@ -1,6 +1,9 @@
+import codePush from '@bitrise/code-push-sdk';
+import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { LoupeProvider, LoupeTarget, sinkFromEnv } from './src/loupe';
 
@@ -10,8 +13,16 @@ import { LoupeProvider, LoupeTarget, sinkFromEnv } from './src/loupe';
  * LoupeTarget is the explicit, always-release-safe way to register a node.)
  */
 function DemoScreen() {
+  const [ota, setOta] = useState('checking…');
+  useEffect(() => {
+    // Show which OTA update is currently running (null = plain binary, no OTA pulled yet).
+    codePush.getUpdateMetadata().then(
+      (u) => setOta(u?.label ? `on · ${u.label}` : 'binary (no OTA yet)'),
+      () => setOta('n/a'),
+    );
+  }, []);
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <LoupeTarget name="Header">
         <Text style={styles.h1}>Loupe demo</Text>
       </LoupeTarget>
@@ -33,8 +44,8 @@ function DemoScreen() {
       </LoupeTarget>
 
       <Text style={styles.diag}>
-        Loupe diagA · sink={sinkFromEnv().name} · tok=
-        {process.env.EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN ? 'set' : 'MISSING'}
+        Loupe build {process.env.EXPO_PUBLIC_LOUPE_BUILD ?? '?'} · sink={sinkFromEnv().name} · tok=
+        {process.env.EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN ? 'set' : 'MISSING'} · ota:{ota}
       </Text>
 
       <StatusBar style="auto" />
@@ -42,9 +53,10 @@ function DemoScreen() {
   );
 }
 
-export default function App() {
+function App() {
   return (
-    <GestureHandlerRootView style={styles.root}>
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={styles.root}>
       {/*
         sinkFromEnv() routes feedback to the `process_feedback` CI workflow (→ agent → PR) when the
         build was made with EXPO_PUBLIC_LOUPE_APP_SLUG + EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN set (CI
@@ -54,9 +66,17 @@ export default function App() {
       <LoupeProvider config={{ enabled: true, sink: sinkFromEnv() }}>
         <DemoScreen />
       </LoupeProvider>
-    </GestureHandlerRootView>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }
+
+// Wrap the root so CodePush checks Bitrise for a JS update on app start and installs it on the
+// next restart. Deployment key + server URL come from app.json (baked into the binary at prebuild).
+export default codePush({
+  checkFrequency: codePush.CheckFrequency.ON_APP_START,
+  installMode: codePush.InstallMode.ON_NEXT_RESTART,
+})(App);
 
 const styles = StyleSheet.create({
   root: { flex: 1 },

@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { FeedbackCategory, Severity } from '../types';
 
@@ -28,13 +29,31 @@ const SEVERITIES: { key: Severity; label: string }[] = [
 
 /** The lightweight feedback composer: category → message → send. Plain language, no jargon. */
 export function Composer({ onSubmit, onCancel }: Props) {
+  const insets = useSafeAreaInsets();
   const [category, setCategory] = useState<FeedbackCategory>('change');
   const [severity, setSeverity] = useState<Severity>('annoying');
   const [comment, setComment] = useState('');
+  const [keyboard, setKeyboard] = useState(0);
   const canSend = comment.trim().length > 0;
 
+  // Edge-to-edge Android (Expo SDK 54) doesn't resize the window for the keyboard, so lift the
+  // sheet above it manually; when closed, clear the system nav bar via the bottom safe-area inset.
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', (e) => setKeyboard(e.endCoordinates.height));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboard(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
   return (
-    <View style={styles.sheet}>
+    <View
+      style={[
+        styles.sheet,
+        { bottom: keyboard, paddingBottom: keyboard > 0 ? 16 : insets.bottom + 16 },
+      ]}
+    >
       <View style={styles.row}>
         {CATEGORIES.map((c) => (
           <Pressable
@@ -101,12 +120,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
     padding: 16,
-    // Android is edge-to-edge on Expo SDK 54, so this sheet draws BEHIND the system nav bar.
-    // Clear it, or the Cancel/Send row is untappable (taps hit the nav bar). The robust fix is
-    // react-native-safe-area-context's useSafeAreaInsets().bottom — added on the next rebuild.
-    paddingBottom: 56,
+    // `bottom` + `paddingBottom` are applied dynamically: raised above the keyboard when it's open,
+    // and cleared of the system nav bar (safe-area inset) when it's closed.
     gap: 12,
     backgroundColor: '#16161d',
     borderTopLeftRadius: 20,
