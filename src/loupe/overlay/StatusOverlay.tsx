@@ -2,10 +2,13 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 interface Props {
   state: 'sending' | 'sent';
+  /** Name of the sink that handled it, so a connectivity test can tell CI from a local log. */
+  destination: string;
 }
 
 /** The visible "your feedback is being processed / was sent" clue shown over the app after Send. */
-export function StatusOverlay({ state }: Props) {
+export function StatusOverlay({ state, destination }: Props) {
+  const reachedCI = destination === 'bitrise-trigger';
   return (
     <View style={styles.scrim} pointerEvents="auto">
       <View style={styles.card}>
@@ -19,7 +22,12 @@ export function StatusOverlay({ state }: Props) {
             <View style={styles.check}>
               <Text style={styles.checkMark}>✓</Text>
             </View>
-            <Text style={styles.text}>Sent to Loupe</Text>
+            <Text style={styles.text}>{reachedCI ? 'Sent to CI' : 'Logged on this device'}</Text>
+            <Text style={styles.sub}>
+              {reachedCI
+                ? 'A build is starting — watch for the update.'
+                : `"${destination}" sink — nothing was sent off-device.`}
+            </Text>
           </>
         )}
       </View>
@@ -44,6 +52,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   text: { color: '#f5f5f7', fontSize: 16, fontWeight: '600' },
+  sub: { color: '#a1a1aa', fontSize: 13, textAlign: 'center', marginTop: -6 },
   check: {
     width: 48,
     height: 48,

@@ -13,10 +13,20 @@ interface Props {
   onPick: (hit: HitResult | null, point: { x: number; y: number }) => void;
   onSubmit: (result: ComposerResult) => void;
   onCancel: () => void;
+  /** Name of the active sink, shown on the confirmation card. */
+  destination: string;
 }
 
 /** Renders the right stage of the capture flow. 'capturing' renders nothing so the screenshot is clean. */
-export function FeedbackOverlay({ mode, screenshot, pick, onPick, onSubmit, onCancel }: Props) {
+export function FeedbackOverlay({
+  mode,
+  screenshot,
+  pick,
+  onPick,
+  onSubmit,
+  onCancel,
+  destination,
+}: Props) {
   if (mode === 'inspecting') {
     return <InspectLayer onPick={onPick} onCancel={onCancel} />;
   }
@@ -26,7 +36,7 @@ export function FeedbackOverlay({ mode, screenshot, pick, onPick, onSubmit, onCa
     );
   }
   if (mode === 'sending' || mode === 'sent') {
-    return <StatusOverlay state={mode} />;
+    return <StatusOverlay state={mode} destination={destination} />;
   }
   return null;
 }

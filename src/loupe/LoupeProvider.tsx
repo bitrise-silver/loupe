@@ -136,6 +136,7 @@ export function LoupeProvider({ config = {}, children }: Props) {
               onPick={onPick}
               onSubmit={onSubmit}
               onCancel={reset}
+              destination={sink.name}
             />
           )}
         </View>
