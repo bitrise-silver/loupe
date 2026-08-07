@@ -44,7 +44,7 @@ function DemoScreen() {
       </LoupeTarget>
 
       <Text style={styles.diag}>
-        Loupe diagB · sink={sinkFromEnv().name} · tok=
+        Loupe build {process.env.EXPO_PUBLIC_LOUPE_BUILD ?? '?'} · sink={sinkFromEnv().name} · tok=
         {process.env.EXPO_PUBLIC_LOUPE_TRIGGER_TOKEN ? 'set' : 'MISSING'} · ota:{ota}
       </Text>
 

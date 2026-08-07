@@ -69,6 +69,7 @@ workflows:
                 set -euo pipefail
                 # App slug is public (it appears in build URLs). Override with LOUPE_APP_SLUG if needed.
                 envman add --key EXPO_PUBLIC_LOUPE_APP_SLUG --value "${LOUPE_APP_SLUG:-172f1253-832b-4abf-b338-77a7fa5d7a23}"
+                envman add --key EXPO_PUBLIC_LOUPE_BUILD --value "${BITRISE_BUILD_NUMBER:-dev}"
                 # The build-trigger token is a Bitrise Secret (LOUPE_TRIGGER_TOKEN). Expo inlines
                 # EXPO_PUBLIC_* into the bundle at build time; without it the app uses the console sink.
                 if [ -n "${LOUPE_TRIGGER_TOKEN:-}" ]; then
@@ -123,6 +124,7 @@ workflows:
                 set -euo pipefail
                 # App slug is public (it appears in build URLs). Override with LOUPE_APP_SLUG if needed.
                 envman add --key EXPO_PUBLIC_LOUPE_APP_SLUG --value "${LOUPE_APP_SLUG:-172f1253-832b-4abf-b338-77a7fa5d7a23}"
+                envman add --key EXPO_PUBLIC_LOUPE_BUILD --value "${BITRISE_BUILD_NUMBER:-dev}"
                 # The build-trigger token is a Bitrise Secret (LOUPE_TRIGGER_TOKEN). Expo inlines
                 # EXPO_PUBLIC_* into the bundle at build time; without it the app uses the console sink.
                 if [ -n "${LOUPE_TRIGGER_TOKEN:-}" ]; then
@@ -279,6 +281,7 @@ workflows:
                 set -euo pipefail
                 # App slug is public (it appears in build URLs). Override with LOUPE_APP_SLUG if needed.
                 envman add --key EXPO_PUBLIC_LOUPE_APP_SLUG --value "${LOUPE_APP_SLUG:-172f1253-832b-4abf-b338-77a7fa5d7a23}"
+                envman add --key EXPO_PUBLIC_LOUPE_BUILD --value "${BITRISE_BUILD_NUMBER:-dev}"
                 # The build-trigger token is a Bitrise Secret (LOUPE_TRIGGER_TOKEN). Expo inlines
                 # EXPO_PUBLIC_* into the bundle at build time; without it the app uses the console sink.
                 if [ -n "${LOUPE_TRIGGER_TOKEN:-}" ]; then
