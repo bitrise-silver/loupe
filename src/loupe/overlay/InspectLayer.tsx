@@ -1,5 +1,5 @@
 import { useContext, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { LoupeContext } from '../context';
 import type { HitResult } from '../registry/registry';
@@ -11,6 +11,9 @@ interface Props {
 }
 
 const rectStyle = (r: Rect) => ({ left: r.x, top: r.y, width: r.width, height: r.height });
+
+/** Height of the bottom strip the action bar covers: its `bottom: 40` offset + button height. */
+const BAR_STRIP = 96;
 
 /**
  * Transparent inspect layer. Tap a component → we hit-test the registry and highlight the box,
@@ -26,8 +29,15 @@ export function InspectLayer({ onPick, onCancel }: Props) {
     null,
   );
 
+  const { height } = useWindowDimensions();
+
   const onTap = async (x: number, y: number) => {
     const hit = ctx ? await ctx.registry.hitTest(x, y) : null;
+    // The action bar owns the bottom strip, but its Confirm button only exists once something is
+    // picked — so until then a tap aimed at that row falls through to this full-screen Pressable.
+    // Recording it would pin a spot the bar hides, and put Confirm right under the finger that just
+    // tapped, so the next tap commits a meaningless pick. Real component hits still count.
+    if (!hit && y > height - BAR_STRIP) return;
     setSel({ hit, point: { x, y } });
   };
 
