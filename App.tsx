@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 17, fontWeight: '600', color: '#f5f5f7' },
   cardBody: { fontSize: 15, lineHeight: 21, color: '#a1a1aa' },
   button: {
-    backgroundColor: '#6d5efc',
+    backgroundColor: '#dc2626',
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
